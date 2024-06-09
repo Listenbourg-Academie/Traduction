@@ -3,7 +3,7 @@ let ERROR_DIV = document.getElementById("errors");
 let input = document.getElementById("input");
 let output = document.getElementById("output");
 
-const translationSpeed = 200;
+const translationSpeed = 1000;
 
 let translateTiemout = null;
 
@@ -13,6 +13,11 @@ let historyEmpty = true;
 let historyEnabled = false;
 
 const DEBUG = false;
+
+// const TRANSLATOR_API_URL = "http://localhost:3000";
+const TRANSLATOR_API_URL = "http://91.121.75.14:5000";
+
+console.log("SERVER URL", TRANSLATOR_API_URL);
 
 function escapeHtml(text) {
   return text
@@ -26,18 +31,54 @@ function escapeHtml(text) {
 let loading = document.getElementById("translateLoading");
 let loadingTimeout = null;
 
-function fetchTranslation(from, text, to) {
+let lastErrorTS = 0;
+
+function clearError() {
   ERROR_DIV.innerHTML = "";
   ERROR_DIV.classList.remove("visible");
+}
 
-  let url = `http://51.210.104.99:1841/translate?from=${from}&to=${to}&text=${text}`;
+function displayError(error) {
+  let nowTS = Date.now();
+  lastErrorTS = nowTS;
+  ERROR_DIV.innerHTML = error;
+  ERROR_DIV.classList.add("visible");
+  translateLoading.classList.remove("visible");
 
-  fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, {
-    method: "GET",
+  setTimeout(() => {
+    if (nowTS === lastErrorTS) {
+      clearError();
+    }
+  }, 3000);
+}
+
+function fetchTranslation(from, text, to) {
+  if (!text.trim()) {
+    output.innerHTML = "";
+    return;
+  }
+  let url = `${TRANSLATOR_API_URL}/translate`;
+
+  fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: from,
+      to: to,
+      text: text,
+    }),
   })
     .then((response) => response.json())
     .then((response) => {
-      response = JSON.parse(response.contents);
+      // Error handling
+      if (response.error) {
+        displayError(
+          "<p>Le serveur de traduction est actuellement indisponible, veuillez réessayer plus tard.</p>"
+        );
+        return;
+      }
 
       clearTimeout(loadingTimeout);
       loadingTimeout = setTimeout(() => {
@@ -47,7 +88,7 @@ function fetchTranslation(from, text, to) {
       DEBUG && console.log(text, response);
 
       let newWords = [];
-      let details = JSON.parse(response.detail_reponse);
+      let details = response.detail_reponse;
 
       for (let detail of details) {
         let word = detail.word.trim();
@@ -134,11 +175,12 @@ function fetchTranslation(from, text, to) {
     })
     .catch((error) => {
       console.error(error);
-      ERROR_DIV.innerHTML += `
-                <h3>Une erreur est survenue !</h3>
-                <p>${error}</p>
-        `;
-      ERROR_DIV.classList.add("visible");
+      displayError(
+        `
+          <h3>Une erreur est survenue !</h3>
+          <p>${error}</p>
+        `
+      );
     });
 }
 
